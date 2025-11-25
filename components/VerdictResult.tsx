@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { VerdictData, CaseData, JudgePersona, CourtLevel } from '../types';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
@@ -26,11 +25,12 @@ const VerdictResult: React.FC<VerdictResultProps> = ({ verdict, caseData, onRese
   const shareCardRef = useRef<HTMLDivElement>(null);
 
   const isCute = persona === JudgePersona.CUTE;
-  const isToxic = persona === JudgePersona.TOXIC;
   
   // Current Court Level
   const courtLevel = verdict.courtLevel || CourtLevel.INITIAL;
-  const canAppeal = isToxic && courtLevel !== CourtLevel.HIGH && onAppeal;
+  
+  // Enable appeal for both personas, as long as it's not the final court
+  const canAppeal = courtLevel !== CourtLevel.HIGH && onAppeal;
 
   // Initialize Timer
   useEffect(() => {
@@ -129,13 +129,15 @@ const VerdictResult: React.FC<VerdictResultProps> = ({ verdict, caseData, onRese
   };
 
   const stamp = getStampData();
-  const showShortAdvice = isCute || (verdict.shortAdvice && verdict.shortAdvice.length > 5);
+  
+  // Show Short Advice: Always in Cute Mode, only in High Court for Toxic Mode
+  const showShortAdvice = isCute || (courtLevel === CourtLevel.HIGH && verdict.shortAdvice && verdict.shortAdvice.length > 2);
 
   // Court Header Info
   const getCourtInfo = () => {
     switch (courtLevel) {
-      case CourtLevel.INTERMEDIATE: return { name: "中级狗民法院", icon: "🏠" };
-      case CourtLevel.HIGH: return { name: "最高狗民法院", icon: "🏛️" };
+      case CourtLevel.INTERMEDIATE: return { name: isCute ? "中级暖心调解" : "中级狗民法院", icon: "🏠" };
+      case CourtLevel.HIGH: return { name: isCute ? "最高暖心裁决" : "最高狗民法院", icon: "🏛️" };
       default: return { name: isCute ? "小狗调解室" : "初级狗民法院", icon: isCute ? "🦴" : "⛺" };
     }
   };
@@ -277,8 +279,10 @@ const VerdictResult: React.FC<VerdictResultProps> = ({ verdict, caseData, onRese
                <button
                  onClick={timeLeft > 0 ? onAppeal : undefined}
                  disabled={timeLeft === 0}
-                 className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-all border border-purple-600/50 ${
-                   timeLeft > 0 ? 'bg-stone-900 text-purple-400 hover:bg-stone-800' : 'bg-stone-900 text-stone-600 border-stone-800 cursor-not-allowed'
+                 className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-all border ${
+                   timeLeft > 0 
+                     ? (isCute ? 'bg-white text-stone-700 border-yellow-300 hover:bg-yellow-50' : 'bg-stone-900 text-purple-400 border-purple-600/50 hover:bg-stone-800')
+                     : 'bg-stone-200 text-stone-400 border-stone-200 cursor-not-allowed opacity-70'
                  }`}
                >
                  <Gavel className="w-4 h-4" />
@@ -295,7 +299,7 @@ const VerdictResult: React.FC<VerdictResultProps> = ({ verdict, caseData, onRese
                disabled={isGeneratingCard}
                className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-8 py-3 rounded-xl font-bold transition-all shadow-lg hover:-translate-y-1 active:translate-y-0 disabled:opacity-70 disabled:cursor-wait ${
                   isCute
-                  ? 'bg-[#1c1917] text-white hover:bg-stone-700'
+                  ? 'bg-yellow-400 text-stone-900 hover:bg-yellow-500'
                   : 'bg-purple-600 text-white hover:bg-purple-700'
                }`}
              >

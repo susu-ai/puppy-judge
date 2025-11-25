@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { AppState, CaseData, VerdictData, JudgePersona, HistoryItem, CourtLevel, AppealData } from './types';
 import { getPuppyVerdict } from './services/geminiService';
@@ -8,7 +7,7 @@ import HistoryModal from './components/HistoryModal';
 import AppealModal from './components/AppealModal';
 import TransitionView from './components/TransitionView';
 import { Logger } from './utils/logger';
-import { ScrollText, Download } from 'lucide-react';
+import { ScrollText } from 'lucide-react';
 
 const HISTORY_KEY = 'puppy_judge_history';
 
@@ -16,7 +15,8 @@ const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.INPUT);
   const [verdict, setVerdict] = useState<VerdictData | null>(null);
   const [currentCase, setCurrentCase] = useState<CaseData | null>(null);
-  const [persona, setPersona] = useState<JudgePersona>(JudgePersona.CUTE);
+  // Default changed to TOXIC
+  const [persona, setPersona] = useState<JudgePersona>(JudgePersona.TOXIC);
   
   // Appeal & Transition State
   const [isAppealing, setIsAppealing] = useState(false);
@@ -215,7 +215,12 @@ const App: React.FC = () => {
           )}
 
           {/* Transition View */}
-          {transitionTarget && <TransitionView targetLevel={transitionTarget} />}
+          {transitionTarget && (
+            <TransitionView 
+              targetLevel={transitionTarget} 
+              persona={persona} 
+            />
+          )}
 
           {appState === AppState.RESULT && verdict && currentCase && !transitionTarget && (
             <VerdictResult 
@@ -230,12 +235,9 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* Footer */}
+      {/* Footer - Removed Download Logs Button */}
       <footer className="py-8 text-center text-stone-500 text-sm opacity-60">
         <p>© 2024 Puppy Judge Project.</p>
-        <button onClick={() => Logger.downloadLogs()} className="mt-2 text-xs flex items-center justify-center gap-1 mx-auto">
-          <Download className="w-3 h-3" /> 下载调试日志
-        </button>
       </footer>
       
       {/* Modals */}
@@ -244,7 +246,7 @@ const App: React.FC = () => {
         onClose={() => setShowHistory(false)} 
         history={history}
         onSelect={loadHistoryItem}
-        onDelete={() => {}} // Simple delete for now
+        onDelete={() => {}} 
         persona={persona}
       />
 
@@ -253,6 +255,7 @@ const App: React.FC = () => {
         onClose={() => setIsAppealing(false)}
         onSubmit={handleAppealSubmit}
         isHighCourt={verdict?.courtLevel === CourtLevel.INTERMEDIATE}
+        persona={persona}
       />
 
       <style>{`

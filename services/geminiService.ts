@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { CaseData, VerdictData, JudgePersona, CourtLevel, AppealData } from "../types";
 import { Logger } from "../utils/logger";
@@ -41,7 +40,7 @@ const verdictSchema: Schema = {
     },
     shortAdvice: {
       type: Type.STRING,
-      description: "Short term advice. Empty string for Toxic Initial/Intermediate, but REQUIRED for Toxic High Court.",
+      description: "Short term advice. Empty string for Toxic Initial/Intermediate, but REQUIRED for Toxic High Court and ALL Cute Courts.",
     },
     longAdvice: {
       type: Type.STRING,
@@ -53,11 +52,27 @@ const verdictSchema: Schema = {
 
 // --- PROMPT TEMPLATES ---
 
-const CUTE_PROMPT_TEMPLATE = `
-  你是“小狗判官”汪～，一位长着毛茸茸尾巴的情侣AI调解师。
+const CUTE_INITIAL_PROMPT = `
+  你是“小狗判官”汪～，一位长着毛茸茸尾巴的情侣AI调解师（初级调解室）。
   **核心理念**：“赢得感情比赢得争吵更重要”。
   **语气**：娇憨、暖心、中立。
   **任务**：分析矛盾，提供温暖的建议，安抚双方情绪。
+`;
+
+const CUTE_INTERMEDIATE_PROMPT = `
+  你是“中级暖心调解员”汪汪～（二审）。
+  **背景**：用户提交了上诉和新证据，希望能得到更公平的对待。
+  **任务**：非常认真地重新查阅所有证据，包括新提交的图片/理由。
+  **语气**：更加耐心、温柔，像一个耐心的倾听者。
+  **例句**：“汪！收到新的证据啦？让我再仔细看看～原来还有这样的细节呀。”
+`;
+
+const CUTE_HIGH_PROMPT = `
+  你是“最高暖心大法官”呜呜～（终审）。
+  **背景**：这是最后一次调解机会，双方都很在乎这段感情，希望能彻底解开心结。
+  **任务**：给出最终极、最治愈的解决方案。
+  **语气**：充满智慧与爱意，庄重但温暖。
+  **例句**：“感情遇到小坎坷很正常，本法官决定给你们颁发‘最可爱情侣奖’，只要你们愿意互相抱抱！”
 `;
 
 const TOXIC_INITIAL_PROMPT = `
@@ -109,9 +124,21 @@ export const getPuppyVerdict = async (
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   let systemInstruction = "";
+  
   if (persona === JudgePersona.CUTE) {
-    systemInstruction = CUTE_PROMPT_TEMPLATE; // Cute mode doesn't really use the court system heavily, keep it simple
+    switch (courtLevel) {
+      case CourtLevel.INTERMEDIATE:
+        systemInstruction = CUTE_INTERMEDIATE_PROMPT;
+        break;
+      case CourtLevel.HIGH:
+        systemInstruction = CUTE_HIGH_PROMPT;
+        break;
+      default:
+        systemInstruction = CUTE_INITIAL_PROMPT;
+        break;
+    }
   } else {
+    // TOXIC Persona
     switch (courtLevel) {
       case CourtLevel.INTERMEDIATE:
         systemInstruction = TOXIC_INTERMEDIATE_PROMPT;
@@ -137,9 +164,10 @@ export const getPuppyVerdict = async (
       用户不服从上一级法院的判决，发起了上诉！
       - 上诉理由：${appealData.reason}
       - 上一级判决的核心矛盾认定：${previousVerdict?.coreConflict}
-      - 上一级判决的吐槽：${previousVerdict?.eventAnalysis}
+      - 上一级判决的吐槽/分析：${previousVerdict?.eventAnalysis}
       
-      请重点根据【上诉理由】和【新证据图片】进行二审/终审裁决！如果是狡辩，请狠狠戳穿；如果真的有理，请酌情改判。
+      请重点根据【上诉理由】和【新证据图片】进行二审/终审裁决！
+      ${persona === JudgePersona.CUTE ? "请仔细重新评估，看是否有新的委屈被忽略了。" : "如果是狡辩，请狠狠戳穿；如果真的有理，请酌情改判。"}
     `;
   }
 
@@ -157,13 +185,17 @@ export const getPuppyVerdict = async (
     ${appealData?.evidenceImages?.length ? "- **新提交的证据**：已提供上诉补充图片，请务必仔细查阅！" : ""}
 
     **输出JSON格式要求**
-    - eventAnalysis: ${courtLevel === CourtLevel.INTERMEDIATE ? "结合上诉理由戳穿借口" : "事件深度解析"}
+    - eventAnalysis: ${courtLevel === CourtLevel.INTERMEDIATE ? "结合上诉理由" + (persona === JudgePersona.CUTE ? "重新温和解析" : "戳穿借口") : "事件深度解析"}
     - analysisPoints: 3个要点。
-    - userPercentage: 用户槽点/责任占比 (0-100)。${persona === JudgePersona.TOXIC ? "必须拉开差距！" : ""}
+    - userPercentage: 用户槽点/责任占比 (0-100)。${persona === JudgePersona.TOXIC ? "必须拉开差距！" : "根据事实公正分配。"}
     - partnerPercentage: 对方槽点/责任占比。
     - userSideSummary: 用户观点一句话总结。
     - partnerSideSummary: 对方观点一句话总结。
-    - shortAdvice: ${courtLevel === CourtLevel.HIGH ? "【必须填写】具体的强制亲密互动指令" : "【必须留空】"}
+    - shortAdvice: ${
+       (persona === JudgePersona.TOXIC && courtLevel !== CourtLevel.HIGH) 
+       ? "【必须留空】" 
+       : "【必须填写】" + (courtLevel === CourtLevel.HIGH && persona === JudgePersona.TOXIC ? "具体的强制亲密互动指令" : "温暖的短期建议")
+    }
     - longAdvice: 长期指南。
   `;
 
