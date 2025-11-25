@@ -6,6 +6,17 @@ export interface CaseData {
   chatImages?: string[]; // Array of Base64 strings (Data URLs)
 }
 
+export interface AppealData {
+  reason: string;
+  evidenceImages?: string[];
+}
+
+export enum CourtLevel {
+  INITIAL = 'INITIAL',       // 初级法院 (一审)
+  INTERMEDIATE = 'INTERMEDIATE', // 中级法院 (二审)
+  HIGH = 'HIGH'              // 高级法院 (终审)
+}
+
 export interface VerdictData {
   cuteOpening: string;
   coreConflict: string;
@@ -17,6 +28,8 @@ export interface VerdictData {
   partnerSideSummary: string;
   shortAdvice: string;
   longAdvice: string;
+  courtLevel?: CourtLevel; // Track which court gave this verdict
+  timestamp?: number;      // For countdown logic
 }
 
 export interface HistoryItem {
@@ -25,6 +38,7 @@ export interface HistoryItem {
   caseData: CaseData;
   verdict: VerdictData;
   persona: JudgePersona;
+  appeals?: AppealData[]; // Record appeal history
 }
 
 export enum AppState {

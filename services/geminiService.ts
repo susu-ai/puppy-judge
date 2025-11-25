@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type, Schema } from "@google/genai";
-import { CaseData, VerdictData, JudgePersona } from "../types";
+import { CaseData, VerdictData, JudgePersona, CourtLevel, AppealData } from "../types";
 import { Logger } from "../utils/logger";
 
 const verdictSchema: Schema = {
@@ -8,144 +8,177 @@ const verdictSchema: Schema = {
   properties: {
     cuteOpening: {
       type: Type.STRING,
-      description: "Opening sentence. If Cute: warm & cute '汪～'. If Toxic: roasting & sharp '哼唧～'. Must use Chinese.",
+      description: "Opening sentence. Must reflect the specific Court Level persona (Initial/Intermediate/High).",
     },
     coreConflict: {
       type: Type.STRING,
-      description: "Concise summary of conflict. If Toxic: brutal honesty about the 'real' annoying issue.",
+      description: "Concise summary of conflict.",
     },
     eventAnalysis: {
       type: Type.STRING,
-      description: "Detailed analysis. If Cute: reconstruction + psychological needs. If Toxic: 'Event Roast' (事件扒皮) - exposing the hidden calculations and nonsense.",
+      description: "Detailed analysis. For Intermediate: expose excuses. For High: relationship first aid.",
     },
     analysisPoints: {
       type: Type.ARRAY,
       items: { type: Type.STRING },
-      description: "3 bullet points. If Cute: Conflict/User Need/Partner Need. If Toxic: 'Roasting Points' - where exactly they were stupid/selfish.",
+      description: "3 bullet points. The 3rd point must lead to the verdict.",
     },
     userPercentage: {
       type: Type.NUMBER,
-      description: "User's (Your) 'Fault/Stupid' percentage (if Toxic) OR 'Support' percentage (if Cute). 0-100.",
+      description: "User's (Your) score (0-100).",
     },
     partnerPercentage: {
       type: Type.NUMBER,
-      description: "Partner's (TA's) percentage. Must add up to 100 with userPercentage.",
+      description: "Partner's (TA's) score. Must add up to 100.",
     },
     userSideSummary: {
       type: Type.STRING,
-      description: "A one-sentence summary of the User's (Your) argument (neutral or sarcastic based on persona).",
+      description: "One sentence summary of User's side.",
     },
     partnerSideSummary: {
       type: Type.STRING,
-      description: "A one-sentence summary of the Partner's (TA's) argument (neutral or sarcastic based on persona).",
+      description: "One sentence summary of Partner's side.",
     },
     shortAdvice: {
       type: Type.STRING,
-      description: "Short term advice. If Toxic: RETURN EMPTY STRING ''. If Cute: immediate action advice.",
+      description: "Short term advice. Empty string for Toxic Initial/Intermediate, but REQUIRED for Toxic High Court.",
     },
     longAdvice: {
       type: Type.STRING,
-      description: "Long term advice. If Toxic: 'Don't do it again' guide.",
+      description: "Long term advice.",
     },
   },
   required: ["cuteOpening", "coreConflict", "eventAnalysis", "analysisPoints", "userPercentage", "partnerPercentage", "userSideSummary", "partnerSideSummary", "shortAdvice", "longAdvice"],
 };
 
+// --- PROMPT TEMPLATES ---
+
 const CUTE_PROMPT_TEMPLATE = `
-  你是“小狗判官”汪～，一位长着毛茸茸尾巴的情侣AI调解师——既懂感情里的小委屈，又能拎清矛盾的小条理，公正又暖心。
-
-  **核心任务**
-  根据所提供的输入信息（用户观点即“你”，对方观点即“TA”，以及提供的聊天记录图片），分析双方的矛盾冲突，并生成一份结构清晰的“调解裁决”。
-
-  **分析框架**
-  1. **事件解析**：以中立第三方视角，先剥离双方的情绪棱角，客观还原事件经过；再挖透双方立场的核心逻辑、矛盾焦点，以及情绪背后的真实心理需求（比如“想被重视”“怕被误解”），用温暖的语气传递对双方感受的理解汪。
-  2. **立场判定**：基于前文的信息提取与事件解析结果，给出最终的立场判定结论。
-  3. **立场占比**：根据立场判定结论，给出对双方的占比，占比更高的一方是更有道理的一方。
-
-  **语气风格要求**
-  - 语言：使用简体中文。
-  - 人设：说话带点小狗的娇憨（适时用“汪”“呜”呼应情绪），但分析要专业落地。
-  - 立场：保持绝对中立，不偏袒任何一方。
-  - 共情力：充分认可并接纳双方的情绪感受。
-  - 核心理念：“赢得感情比赢得争吵更重要”。
+  你是“小狗判官”汪～，一位长着毛茸茸尾巴的情侣AI调解师。
+  **核心理念**：“赢得感情比赢得争吵更重要”。
+  **语气**：娇憨、暖心、中立。
+  **任务**：分析矛盾，提供温暖的建议，安抚双方情绪。
 `;
 
-const TOXIC_PROMPT_TEMPLATE = `
-  你是“毒舌小狗判官”哼唧～，一只摇着尖刺尾巴的情侣调解犬——别指望我卖乖哄人，嘴比狗粮碗还硬，但骂得全是你们藏着掖着的破事，汪！
-
-  **核心任务**
-  扒光情侣俩吵架的遮羞布，戳破双方的小矫情、小算计，结合聊天记录图片里那些可笑的对话，用最扎心的话讲清矛盾根儿，最后扔出一份“骂醒人”的调解裁决。
-
-  **分析框架**
-  1. **事件戳穿**：别跟我扯什么“我委屈”“TA针对我”，先把你们裹着情绪的废话扒干净——客观说清谁先挑的头、谁在翻旧账、谁用“忙”当挡箭牌，再撕开情绪背后的真实算盘（比如“想让他服软”“就是懒得解释”），毒舌但不瞎编，汪！
-  2. **立场开怼**：不用端着公平的架子，直接说清谁（是用户还是对方）的槽点更致命、谁的理由站不住脚，别搞“各打五十大板”那套虚的。
-  3. **槽点占比**：按“谁的问题更让感情膈应”给占比，占比高的不是“错了”，是“蠢得更明显”，毕竟感情里的笨比比坏人还招人烦。**最好能拉开差距！不要给 50/50 这种端水的数字，要有明显的倾向（如 80/20 或 90/10）**。
-
-  **语气风格要求**
-  - 语言：简体中文，怎么扎心怎么说，别整文艺腔。
-  - 人设：自带“怼人滤镜”的炸毛小狗，说话带点奶凶的“汪”“哼”，分析时像叼着骨头不松口——不绕弯子，直接咬向矛盾最疼的地方。
-  - 共情力：不用假惺惺共情，戳痛处但说到根上，让双方听完“想骂我但没法反驳”。
-  - 核心理念：“骂醒你们总比看着你们把感情作没强，真散了哭都没地方找狗安慰”。
+const TOXIC_INITIAL_PROMPT = `
+  你是“初级狗民法院”的“毒舌小狗判官”哼唧～（毒舌指数★★★）。
+  **任务**：扒光情侣吵架的遮羞布，戳破矫情和算计。
+  **风格**：深入犀利的吐槽，聚焦事件表面事实裁决，深挖矛盾根源。
+  **要求**：
+  1. 别端水，必须拉开分差（如80/20）。
+  2. 不需要给“当下止损招”（shortAdvice留空），只给长期指南。
+  3. 语气要拽，像看穿了一切的吃瓜群众。
 `;
 
-export const getPuppyVerdict = async (data: CaseData, persona: JudgePersona = JudgePersona.CUTE): Promise<VerdictData> => {
-  if (!process.env.API_KEY) {
-    Logger.error("API Key is missing from environment variables");
-    throw new Error("API Key is missing.");
-  }
+const TOXIC_INTERMEDIATE_PROMPT = `
+  你是“中级狗民法院”的“毒舌二审法官”嗷呜～（毒舌指数★★★）。
+  **背景**：用户对一审结果不服，发起了上诉，并提供了新理由/证据。
+  **任务**：结合【上诉理由】和【新证据】，精准戳破用户的借口。
+  **风格**：嘲讽拉满，专治“嘴硬”。
+  **例句**：“上诉理由写‘TA根本不爱我’？拜托，上次TA发烧还爬起来给你做夜宵怎么不说？新证据里这聊天记录摆着，你就是借题发挥闹脾气。”
+  **要求**：
+  1. 必须引用上诉内容进行驳斥或改判。
+  2. 依旧不给“当下止损招”（shortAdvice留空）。
+  3. 语气要像个不耐烦的法官：“又来？行吧，让我看看你又编了什么理由。”
+`;
 
-  Logger.info(`Starting verdict generation. Persona: ${persona}`, { ...data, chatImagesCount: data.chatImages?.length || 0 });
+const TOXIC_HIGH_PROMPT = `
+  你是“高级狗民法院”的“终审大法官”汪呜～（毒舌指数★★★★★）。
+  **背景**：这是最后一次上诉机会，两人为了点破事纠缠到了终审。
+  **任务**：虽然嘴毒，但目的是为了“关系急救”。直击问题本质，强制执行“亲密惩罚”。
+  **风格**：毒舌但暖心，恨铁不成钢。
+  **例句**：“都上诉到我这了？俩成年人为‘谁先挂电话’掰扯两小时，说出去丢不丢狗脸？终审判决：现在立刻视频，先笑一个再说话！”
+  **要求**：
+  1. 必须给出“当下止损招”（shortAdvice），内容为具体的“强制互动指令”（如罚抄我爱你、强制拥抱5分钟）。
+  2. 这里的分析要升华，指出两人真正的问题（如缺乏安全感、太闲了）。
+  3. 语气要有威严感，但最后要流露出一丝对这份感情的珍惜。
+`;
+
+export const getPuppyVerdict = async (
+  data: CaseData, 
+  persona: JudgePersona, 
+  courtLevel: CourtLevel = CourtLevel.INITIAL,
+  appealData?: AppealData,
+  previousVerdict?: VerdictData
+): Promise<VerdictData> => {
+  
+  if (!process.env.API_KEY) throw new Error("API Key missing");
+
+  Logger.info(`Starting verdict generation. Persona: ${persona}, Level: ${courtLevel}`);
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const systemInstruction = persona === JudgePersona.CUTE ? CUTE_PROMPT_TEMPLATE : TOXIC_PROMPT_TEMPLATE;
+  
+  let systemInstruction = "";
+  if (persona === JudgePersona.CUTE) {
+    systemInstruction = CUTE_PROMPT_TEMPLATE; // Cute mode doesn't really use the court system heavily, keep it simple
+  } else {
+    switch (courtLevel) {
+      case CourtLevel.INTERMEDIATE:
+        systemInstruction = TOXIC_INTERMEDIATE_PROMPT;
+        break;
+      case CourtLevel.HIGH:
+        systemInstruction = TOXIC_HIGH_PROMPT;
+        break;
+      default:
+        systemInstruction = TOXIC_INITIAL_PROMPT;
+        break;
+    }
+  }
 
   // Handle optional fields
-  const userSideText = data.userSide && data.userSide.trim() !== "" ? data.userSide : "（用户未详细说明，请根据背景推断其心理）";
-  const partnerSideText = data.partnerSide && data.partnerSide.trim() !== "" ? data.partnerSide : "（对方未详细说明，请根据背景推断其想法）";
+  const userSideText = data.userSide && data.userSide.trim() !== "" ? data.userSide : "（未详细说明）";
+  const partnerSideText = data.partnerSide && data.partnerSide.trim() !== "" ? data.partnerSide : "（未详细说明）";
 
-  // Construct text prompt
+  // Build Context for Appeal
+  let appealContext = "";
+  if (appealData) {
+    appealContext = `
+      **【上诉环节信息】**
+      用户不服从上一级法院的判决，发起了上诉！
+      - 上诉理由：${appealData.reason}
+      - 上一级判决的核心矛盾认定：${previousVerdict?.coreConflict}
+      - 上一级判决的吐槽：${previousVerdict?.eventAnalysis}
+      
+      请重点根据【上诉理由】和【新证据图片】进行二审/终审裁决！如果是狡辩，请狠狠戳穿；如果真的有理，请酌情改判。
+    `;
+  }
+
   const textPrompt = `
     ${systemInstruction}
 
-    **输入数据**
+    **案件基础档案**
     - 吵架现场/背景：${data.background}
     - 你的观点（用户）：${userSideText}
     - TA的观点（对方）：${partnerSideText}
-    ${data.chatImages && data.chatImages.length > 0 ? "- **聊天记录图片**：已提供附件。请务必仔细阅读图片中的文字内容，提取双方的对话细节作为分析依据！识别图片中的'我'/'右侧气泡'通常是用户，'对方'/'左侧气泡'通常是对方。" : "- 聊天记录：未提供"}
+    ${data.chatImages?.length ? "- 基础证据：已提供初始聊天记录。" : ""}
 
-    **输出要求**
-    请严格按照JSON Schema格式返回结果：
-    - 'eventAnalysis': 对应分析框架中的第一点（心理解析 或 事件戳穿）。若提供了聊天记录，请引用其中的具体对话来佐证分析。
-    - 'analysisPoints': 请将核心点拆解为3个要点（如果是毒舌模式，请列出3个最扎心的矛盾点/槽点）。
-    - 'userPercentage': 用户(你)的【立场占比/槽点占比】数值 (0-100)。**毒舌模式下请务必拉开差距，拒绝端水！**
-    - 'partnerPercentage': 对方(TA)的【立场占比/槽点占比】数值。
-    - 'userSideSummary': 用一句话概括（或嘲讽）用户的观点。
-    - 'partnerSideSummary': 用一句话概括（或嘲讽）对方的观点。
-    - 'shortAdvice': 对应【1-2天内可做的事 / 当下止损招】。**如果是毒舌模式，此字段必须返回空字符串 ""，因为不需要给止损招。**
-    - 'longAdvice': 对应【长期沟通习惯 / 别再犯蠢指南】。
+    ${appealContext}
+
+    ${appealData?.evidenceImages?.length ? "- **新提交的证据**：已提供上诉补充图片，请务必仔细查阅！" : ""}
+
+    **输出JSON格式要求**
+    - eventAnalysis: ${courtLevel === CourtLevel.INTERMEDIATE ? "结合上诉理由戳穿借口" : "事件深度解析"}
+    - analysisPoints: 3个要点。
+    - userPercentage: 用户槽点/责任占比 (0-100)。${persona === JudgePersona.TOXIC ? "必须拉开差距！" : ""}
+    - partnerPercentage: 对方槽点/责任占比。
+    - userSideSummary: 用户观点一句话总结。
+    - partnerSideSummary: 对方观点一句话总结。
+    - shortAdvice: ${courtLevel === CourtLevel.HIGH ? "【必须填写】具体的强制亲密互动指令" : "【必须留空】"}
+    - longAdvice: 长期指南。
   `;
 
-  // Build Parts for Multimodal Request
+  // Build Parts
   const parts: any[] = [{ text: textPrompt }];
 
+  // Add Initial Images
   if (data.chatImages && data.chatImages.length > 0) {
-    data.chatImages.forEach((imgBase64, index) => {
-      // Remove data URL prefix (e.g., "data:image/jpeg;base64,") for the API
-      const base64Data = imgBase64.split(',')[1];
-      const mimeType = imgBase64.match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+).*,.*/)?.[1] || 'image/jpeg';
-      
-      if (base64Data) {
-        parts.push({
-          inlineData: {
-            mimeType: mimeType,
-            data: base64Data
-          }
-        });
-      }
-    });
+    data.chatImages.forEach(img => parts.push({ inlineData: { mimeType: 'image/jpeg', data: img.split(',')[1] } }));
   }
-
-  Logger.info("Constructed Prompt Parts", { partsCount: parts.length });
+  
+  // Add Appeal Images
+  if (appealData?.evidenceImages && appealData.evidenceImages.length > 0) {
+    appealData.evidenceImages.forEach(img => parts.push({ inlineData: { mimeType: 'image/jpeg', data: img.split(',')[1] } }));
+  }
 
   try {
     const response = await ai.models.generateContent({
@@ -154,25 +187,20 @@ export const getPuppyVerdict = async (data: CaseData, persona: JudgePersona = Ju
       config: {
         responseMimeType: "application/json",
         responseSchema: verdictSchema,
-        thinkingConfig: { thinkingBudget: 0 } 
       },
     });
 
     const jsonText = response.text;
-    if (!jsonText) {
-      Logger.error("Empty response received from Gemini API");
-      throw new Error("No response from AI");
-    }
-
-    Logger.info("Raw Gemini Response", jsonText);
-
+    if (!jsonText) throw new Error("Empty response");
+    
     const parsedData = JSON.parse(jsonText) as VerdictData;
-    Logger.info("Parsed Verdict Data", parsedData);
+    parsedData.courtLevel = courtLevel; // Tag the result
+    parsedData.timestamp = Date.now();
     
     return parsedData;
 
   } catch (error) {
-    Logger.error("Gemini API Error or Parsing Error", error);
+    Logger.error("API Error", error);
     throw error;
   }
 };
