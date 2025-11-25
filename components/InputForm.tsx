@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+
+import React, { useState, useRef } from 'react';
 import { CaseData, JudgePersona } from '../types';
-import { Sparkles, MessageCircleHeart, ScrollText, ShieldCheck, Heart, Zap, Skull, User, UserCheck } from 'lucide-react';
+import { ScrollText, ShieldCheck, User, UserCheck, Skull, ImagePlus, X } from 'lucide-react';
+import { Logger } from '../utils/logger';
 
 interface InputFormProps {
   onSubmit: (data: CaseData) => void;
@@ -13,14 +15,51 @@ const InputForm: React.FC<InputFormProps> = ({ onSubmit, isLoading, persona, set
   const [formData, setFormData] = useState<CaseData>({
     background: '',
     userSide: '',
-    partnerSide: ''
+    partnerSide: '',
+    chatImages: []
   });
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const isCute = persona === JudgePersona.CUTE;
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files);
+      const currentCount = formData.chatImages?.length || 0;
+      
+      if (currentCount + files.length > 10) {
+        alert("最多只能上传10张图片哦！");
+        return;
+      }
+
+      files.forEach(file => {
+        if (file.size > 4 * 1024 * 1024) {
+           alert(`图片 ${file.name} 太大了，请上传小于4MB的图片`);
+           return;
+        }
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setFormData(prev => ({
+            ...prev,
+            chatImages: [...(prev.chatImages || []), reader.result as string]
+          }));
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      chatImages: (prev.chatImages || []).filter((_, i) => i !== index)
+    }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -121,6 +160,67 @@ const InputForm: React.FC<InputFormProps> = ({ onSubmit, isLoading, persona, set
               required
             />
           </div>
+          
+          {/* Chat Images Upload */}
+          <div className="space-y-2">
+            <label className={`flex items-center gap-2 font-bold ${labelClass}`}>
+              <ImagePlus className={`w-5 h-5 ${isCute ? 'text-green-500' : 'text-green-600'}`} />
+              聊天记录 / 证据截图
+              <span className="text-xs opacity-60 font-normal ml-auto">
+                 {formData.chatImages?.length || 0}/10 张 (选填)
+              </span>
+            </label>
+            
+            <input 
+              type="file" 
+              accept="image/*" 
+              multiple 
+              onChange={handleFileChange} 
+              className="hidden" 
+              ref={fileInputRef}
+            />
+            
+            <div className={`grid grid-cols-4 md:grid-cols-5 gap-2 p-3 rounded-2xl border-2 border-dashed transition-colors ${
+               isCute ? 'bg-stone-50 border-stone-200' : 'bg-stone-800 border-stone-700'
+            }`}>
+               {/* Upload Trigger Button */}
+               {(formData.chatImages?.length || 0) < 10 && (
+                 <button 
+                   type="button"
+                   onClick={() => fileInputRef.current?.click()}
+                   className={`aspect-square rounded-xl flex flex-col items-center justify-center gap-1 transition-colors ${
+                      isCute 
+                      ? 'bg-white text-stone-400 hover:bg-yellow-50 hover:text-yellow-600 border border-stone-200 hover:border-yellow-200' 
+                      : 'bg-stone-900 text-stone-500 hover:bg-stone-800 hover:text-purple-400 border border-stone-700 hover:border-purple-500'
+                   }`}
+                 >
+                   <ImagePlus className="w-6 h-6" />
+                   <span className="text-[10px]">添加</span>
+                 </button>
+               )}
+
+               {/* Thumbnails */}
+               {formData.chatImages?.map((img, idx) => (
+                 <div key={idx} className="relative aspect-square rounded-xl overflow-hidden group border border-stone-200/20">
+                    <img src={img} alt="evidence" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removeImage(idx)}
+                      className="absolute top-0.5 right-0.5 bg-black/50 text-white rounded-full p-0.5 hover:bg-red-500 transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                 </div>
+               ))}
+               
+               {/* Empty Placeholder if no images */}
+               {(formData.chatImages?.length === 0) && (
+                  <div className={`col-span-3 md:col-span-4 flex items-center text-xs px-2 ${isCute ? 'text-stone-400' : 'text-stone-600'}`}>
+                    支持微信截图等，AI会参考图片内容评理哦
+                  </div>
+               )}
+            </div>
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* User Side */}
@@ -138,7 +238,7 @@ const InputForm: React.FC<InputFormProps> = ({ onSubmit, isLoading, persona, set
                   ? "你觉得哪里受委屈了？你希望TA怎么做？"
                   : "是不是想让TA服软？是不是在翻旧账？老实写出来。"
                 }
-                className={`w-full h-40 p-4 rounded-2xl border-2 focus:ring-0 transition-colors resize-none ${userInputClass}`}
+                className={`w-full h-32 p-4 rounded-2xl border-2 focus:ring-0 transition-colors resize-none ${userInputClass}`}
               />
             </div>
 
@@ -157,7 +257,7 @@ const InputForm: React.FC<InputFormProps> = ({ onSubmit, isLoading, persona, set
                   ? "TA当时是怎么说的？TA的理由是什么？"
                   : "是不是觉得你无理取闹？TA是不是在敷衍？别装深情。"
                 }
-                className={`w-full h-40 p-4 rounded-2xl border-2 focus:ring-0 transition-colors resize-none ${partnerInputClass}`}
+                className={`w-full h-32 p-4 rounded-2xl border-2 focus:ring-0 transition-colors resize-none ${partnerInputClass}`}
               />
             </div>
           </div>
@@ -186,7 +286,7 @@ const InputForm: React.FC<InputFormProps> = ({ onSubmit, isLoading, persona, set
               {isLoading ? (
                 <>
                   <span className="animate-spin text-2xl">{isCute ? '🦴' : '🔥'}</span> 
-                  {isCute ? '正在用心分析诉求...' : '正在准备“处刑”...'}
+                  {isCute ? '正在分析图文证据...' : '正在准备“处刑”...'}
                 </>
               ) : (
                 <>

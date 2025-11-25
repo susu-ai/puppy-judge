@@ -3,6 +3,7 @@ export interface CaseData {
   background: string;
   userSide?: string;
   partnerSide?: string;
+  chatImages?: string[]; // Array of Base64 strings (Data URLs)
 }
 
 export interface VerdictData {

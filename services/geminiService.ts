@@ -55,7 +55,7 @@ const CUTE_PROMPT_TEMPLATE = `
   你是“小狗判官”汪～，一位长着毛茸茸尾巴的情侣AI调解师——既懂感情里的小委屈，又能拎清矛盾的小条理，公正又暖心。
 
   **核心任务**
-  根据所提供的输入信息（用户观点即“你”，对方观点即“TA”），分析双方的矛盾冲突，并生成一份结构清晰的“调解裁决”。
+  根据所提供的输入信息（用户观点即“你”，对方观点即“TA”，以及提供的聊天记录图片），分析双方的矛盾冲突，并生成一份结构清晰的“调解裁决”。
 
   **分析框架**
   1. **事件解析**：以中立第三方视角，先剥离双方的情绪棱角，客观还原事件经过；再挖透双方立场的核心逻辑、矛盾焦点，以及情绪背后的真实心理需求（比如“想被重视”“怕被误解”），用温暖的语气传递对双方感受的理解汪。
@@ -74,7 +74,7 @@ const TOXIC_PROMPT_TEMPLATE = `
   你是“毒舌小狗判官”哼唧～，一只摇着尖刺尾巴的情侣调解犬——别指望我卖乖哄人，嘴比狗粮碗还硬，但骂得全是你们藏着掖着的破事，汪！
 
   **核心任务**
-  扒光情侣俩吵架的遮羞布，戳破双方的小矫情、小算计，用最扎心的话讲清矛盾根儿，最后扔出一份“骂醒人”的调解裁决。
+  扒光情侣俩吵架的遮羞布，戳破双方的小矫情、小算计，结合聊天记录图片里那些可笑的对话，用最扎心的话讲清矛盾根儿，最后扔出一份“骂醒人”的调解裁决。
 
   **分析框架**
   1. **事件戳穿**：别跟我扯什么“我委屈”“TA针对我”，先把你们裹着情绪的废话扒干净——客观说清谁先挑的头、谁在翻旧账、谁用“忙”当挡箭牌，再撕开情绪背后的真实算盘（比如“想让他服软”“就是懒得解释”），毒舌但不瞎编，汪！
@@ -94,7 +94,7 @@ export const getPuppyVerdict = async (data: CaseData, persona: JudgePersona = Ju
     throw new Error("API Key is missing.");
   }
 
-  Logger.info(`Starting verdict generation. Persona: ${persona}`, data);
+  Logger.info(`Starting verdict generation. Persona: ${persona}`, { ...data, chatImagesCount: data.chatImages?.length || 0 });
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const systemInstruction = persona === JudgePersona.CUTE ? CUTE_PROMPT_TEMPLATE : TOXIC_PROMPT_TEMPLATE;
@@ -103,17 +103,19 @@ export const getPuppyVerdict = async (data: CaseData, persona: JudgePersona = Ju
   const userSideText = data.userSide && data.userSide.trim() !== "" ? data.userSide : "（用户未详细说明，请根据背景推断其心理）";
   const partnerSideText = data.partnerSide && data.partnerSide.trim() !== "" ? data.partnerSide : "（对方未详细说明，请根据背景推断其想法）";
 
-  const prompt = `
+  // Construct text prompt
+  const textPrompt = `
     ${systemInstruction}
 
     **输入数据**
     - 吵架现场/背景：${data.background}
     - 你的观点（用户）：${userSideText}
     - TA的观点（对方）：${partnerSideText}
+    ${data.chatImages && data.chatImages.length > 0 ? "- **聊天记录图片**：已提供附件。请务必仔细阅读图片中的文字内容，提取双方的对话细节作为分析依据！识别图片中的'我'/'右侧气泡'通常是用户，'对方'/'左侧气泡'通常是对方。" : "- 聊天记录：未提供"}
 
     **输出要求**
     请严格按照JSON Schema格式返回结果：
-    - 'eventAnalysis': 对应分析框架中的第一点（心理解析 或 事件戳穿）。
+    - 'eventAnalysis': 对应分析框架中的第一点（心理解析 或 事件戳穿）。若提供了聊天记录，请引用其中的具体对话来佐证分析。
     - 'analysisPoints': 请将核心点拆解为3个要点（如果是毒舌模式，请列出3个最扎心的矛盾点/槽点）。
     - 'userPercentage': 用户(你)的【立场占比/槽点占比】数值 (0-100)。**毒舌模式下请务必拉开差距，拒绝端水！**
     - 'partnerPercentage': 对方(TA)的【立场占比/槽点占比】数值。
@@ -123,12 +125,32 @@ export const getPuppyVerdict = async (data: CaseData, persona: JudgePersona = Ju
     - 'longAdvice': 对应【长期沟通习惯 / 别再犯蠢指南】。
   `;
 
-  Logger.info("Constructed Prompt", { systemInstructionPreview: systemInstruction.substring(0, 50) + "..." });
+  // Build Parts for Multimodal Request
+  const parts: any[] = [{ text: textPrompt }];
+
+  if (data.chatImages && data.chatImages.length > 0) {
+    data.chatImages.forEach((imgBase64, index) => {
+      // Remove data URL prefix (e.g., "data:image/jpeg;base64,") for the API
+      const base64Data = imgBase64.split(',')[1];
+      const mimeType = imgBase64.match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+).*,.*/)?.[1] || 'image/jpeg';
+      
+      if (base64Data) {
+        parts.push({
+          inlineData: {
+            mimeType: mimeType,
+            data: base64Data
+          }
+        });
+      }
+    });
+  }
+
+  Logger.info("Constructed Prompt Parts", { partsCount: parts.length });
 
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: prompt,
+      contents: { parts: parts },
       config: {
         responseMimeType: "application/json",
         responseSchema: verdictSchema,

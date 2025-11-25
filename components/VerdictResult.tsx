@@ -1,7 +1,8 @@
+
 import React, { useState, useRef } from 'react';
 import { VerdictData, CaseData, JudgePersona } from '../types';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
-import { Share2, RotateCcw, HeartHandshake, CheckCircle2, ThumbsUp, ThumbsDown, BrainCircuit, Flame, AlertTriangle, User, UserCheck } from 'lucide-react';
+import { Share2, RotateCcw, HeartHandshake, CheckCircle2, ThumbsUp, ThumbsDown, BrainCircuit, Flame, AlertTriangle, User, UserCheck, X, Copy, Download, Check } from 'lucide-react';
 import html2canvas from 'html2canvas';
 
 interface VerdictResultProps {
@@ -14,6 +15,10 @@ interface VerdictResultProps {
 const VerdictResult: React.FC<VerdictResultProps> = ({ verdict, caseData, onReset, persona }) => {
   const [feedbackGiven, setFeedbackGiven] = useState<boolean>(false);
   const [isGeneratingCard, setIsGeneratingCard] = useState<boolean>(false);
+  const [shareModalOpen, setShareModalOpen] = useState<boolean>(false);
+  const [shareImage, setShareImage] = useState<string | null>(null);
+  const [copySuccess, setCopySuccess] = useState<boolean>(false);
+  
   const shareCardRef = useRef<HTMLDivElement>(null);
 
   const isCute = persona === JudgePersona.CUTE;
@@ -42,7 +47,7 @@ const VerdictResult: React.FC<VerdictResultProps> = ({ verdict, caseData, onRese
   const messages = isCute ? cuteMessages : toxicMessages;
   const randomMessage = messages[Math.floor(Math.random() * messages.length)];
 
-  const handleShare = async () => {
+  const handleGenerateShare = async () => {
     if (!shareCardRef.current) return;
     setIsGeneratingCard(true);
     try {
@@ -56,16 +61,36 @@ const VerdictResult: React.FC<VerdictResultProps> = ({ verdict, caseData, onRese
       });
       
       const image = canvas.toDataURL("image/png");
-      const link = document.createElement('a');
-      link.href = image;
-      link.download = `${isCute ? '小狗判官' : '毒舌判官'}_裁决书_${new Date().getTime()}.png`;
-      link.click();
+      setShareImage(image);
+      setShareModalOpen(true);
     } catch (err) {
       console.error("Failed to generate image", err);
       alert("卡片生成失败，请截屏分享吧！");
     } finally {
       setIsGeneratingCard(false);
     }
+  };
+
+  const handleCopyImage = async () => {
+    if (!shareImage) return;
+    try {
+      const response = await fetch(shareImage);
+      const blob = await response.blob();
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy image", err);
+      alert("复制失败，请尝试“保存图片”或长按图片保存。");
+    }
+  };
+
+  const handleDownloadImage = () => {
+    if (!shareImage) return;
+    const link = document.createElement('a');
+    link.href = shareImage;
+    link.download = `${isCute ? '小狗判官' : '毒舌判官'}_裁决书_${new Date().getTime()}.png`;
+    link.click();
   };
 
   // Theme Logic
@@ -97,7 +122,6 @@ const VerdictResult: React.FC<VerdictResultProps> = ({ verdict, caseData, onRese
   };
 
   const stamp = getStampData();
-
   const showShortAdvice = isCute || (verdict.shortAdvice && verdict.shortAdvice.length > 5);
 
   return (
@@ -265,7 +289,7 @@ const VerdictResult: React.FC<VerdictResultProps> = ({ verdict, caseData, onRese
            </button>
            
            <button 
-             onClick={handleShare}
+             onClick={handleGenerateShare}
              disabled={isGeneratingCard}
              className={`w-full md:w-auto flex items-center justify-center gap-2 px-8 py-3 rounded-xl font-bold transition-all shadow-lg hover:-translate-y-1 active:translate-y-0 disabled:opacity-70 disabled:cursor-wait ${
                 isCute
@@ -284,6 +308,55 @@ const VerdictResult: React.FC<VerdictResultProps> = ({ verdict, caseData, onRese
         <HeartHandshake className="w-4 h-4 inline mr-1" />
         {randomMessage}
       </div>
+
+      {/* Share Preview Modal */}
+      {shareModalOpen && shareImage && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in-up">
+          <div className={`w-full max-w-md flex flex-col rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] ${
+            isCute ? 'bg-white' : 'bg-stone-900 border border-stone-700'
+          }`}>
+             {/* Modal Header */}
+             <div className={`p-4 flex items-center justify-between border-b ${isCute ? 'border-stone-100' : 'border-stone-800'}`}>
+                <h3 className={`font-bold ${isCute ? 'text-stone-800' : 'text-stone-200'}`}>卡片预览</h3>
+                <button 
+                  onClick={() => setShareModalOpen(false)}
+                  className={`p-2 rounded-full ${isCute ? 'hover:bg-stone-100 text-stone-500' : 'hover:bg-stone-800 text-stone-400'}`}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+             </div>
+             
+             {/* Image Preview */}
+             <div className={`flex-1 overflow-y-auto p-4 flex justify-center ${isCute ? 'bg-stone-100' : 'bg-black'}`}>
+                <img src={shareImage} alt="Verdict Card" className="rounded-xl shadow-lg max-w-full h-auto object-contain" />
+             </div>
+
+             {/* Actions */}
+             <div className={`p-4 flex flex-col gap-3 border-t ${isCute ? 'border-stone-100 bg-white' : 'border-stone-800 bg-stone-900'}`}>
+                <button
+                  onClick={handleCopyImage}
+                  className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${
+                    copySuccess 
+                     ? (isCute ? 'bg-green-500 text-white' : 'bg-green-600 text-white')
+                     : (isCute ? 'bg-stone-100 text-stone-700 hover:bg-stone-200' : 'bg-stone-800 text-stone-300 hover:bg-stone-700')
+                  }`}
+                >
+                   {copySuccess ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                   {copySuccess ? "已复制到剪贴板" : "复制图片"}
+                </button>
+
+                <button
+                  onClick={handleDownloadImage}
+                  className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all shadow-lg ${
+                    isCute ? 'bg-yellow-400 text-stone-900 hover:bg-yellow-500' : 'bg-purple-600 text-white hover:bg-purple-700'
+                  }`}
+                >
+                   <Download className="w-4 h-4" /> 保存到本地
+                </button>
+             </div>
+          </div>
+        </div>
+      )}
 
       {/* Hidden Share Card Template - Offscreen but rendered */}
       <div 
