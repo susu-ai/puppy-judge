@@ -24,11 +24,11 @@ const verdictSchema: Schema = {
     },
     userPercentage: {
       type: Type.NUMBER,
-      description: "User's (Your) score (0-100).",
+      description: "User's score (0-100). Meaning depends on persona (Support vs Roast).",
     },
     partnerPercentage: {
       type: Type.NUMBER,
-      description: "Partner's (TA's) score. Must add up to 100.",
+      description: "Partner's score. Must add up to 100.",
     },
     userSideSummary: {
       type: Type.STRING,
@@ -171,6 +171,15 @@ export const getPuppyVerdict = async (
     `;
   }
 
+  // Define score meaning based on persona
+  const userScoreDesc = persona === JudgePersona.CUTE 
+    ? "用户支持率/合理性占比 (0-100，分数越高越占理)" 
+    : "用户槽点/笨蛋程度 (0-100，分数越高越离谱)";
+  
+  const partnerScoreDesc = persona === JudgePersona.CUTE 
+    ? "对方支持率/合理性占比" 
+    : "对方槽点/笨蛋程度";
+
   const textPrompt = `
     ${systemInstruction}
 
@@ -187,8 +196,8 @@ export const getPuppyVerdict = async (
     **输出JSON格式要求**
     - eventAnalysis: ${courtLevel === CourtLevel.INTERMEDIATE ? "结合上诉理由" + (persona === JudgePersona.CUTE ? "重新温和解析" : "戳穿借口") : "事件深度解析"}
     - analysisPoints: 3个要点。
-    - userPercentage: 用户槽点/责任占比 (0-100)。${persona === JudgePersona.TOXIC ? "必须拉开差距！" : "根据事实公正分配。"}
-    - partnerPercentage: 对方槽点/责任占比。
+    - userPercentage: ${userScoreDesc}. ${persona === JudgePersona.TOXIC ? "必须拉开差距！" : "根据事实公正分配。"}
+    - partnerPercentage: ${partnerScoreDesc}.
     - userSideSummary: 用户观点一句话总结。
     - partnerSideSummary: 对方观点一句话总结。
     - shortAdvice: ${
