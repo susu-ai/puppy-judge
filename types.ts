@@ -41,11 +41,40 @@ export interface HistoryItem {
   appeals?: AppealData[]; // Record appeal history
 }
 
+export interface Comment {
+  id: string;
+  author: string; // '热心汪民' or '毒舌路人'
+  avatar: string; // Emoji
+  content: string;
+  timestamp: number;
+}
+
+export interface PublicCase {
+  id: string;
+  timestamp: number;
+  persona: JudgePersona;
+  caseData: CaseData;
+  verdict: VerdictData;
+  communityVotes: {
+    user: number;
+    partner: number;
+  };
+  comments: Comment[];
+  views: number;
+}
+
+export enum SquareSortType {
+  NEWEST = 'NEWEST',
+  HOTTEST = 'HOTTEST'
+}
+
 export enum AppState {
   INPUT = 'INPUT',
   PROCESSING = 'PROCESSING',
   RESULT = 'RESULT',
-  ERROR = 'ERROR'
+  ERROR = 'ERROR',
+  SQUARE = 'SQUARE',          // 法庭广场列表
+  SQUARE_DETAIL = 'SQUARE_DETAIL' // 法庭广场详情
 }
 
 export enum JudgePersona {

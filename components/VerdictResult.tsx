@@ -1,8 +1,10 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { VerdictData, CaseData, JudgePersona, CourtLevel } from '../types';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
-import { Share2, RotateCcw, HeartHandshake, CheckCircle2, ThumbsUp, ThumbsDown, BrainCircuit, Flame, AlertTriangle, User, UserCheck, X, Copy, Download, Check, Gavel, Timer } from 'lucide-react';
+import { Share2, RotateCcw, HeartHandshake, CheckCircle2, ThumbsUp, ThumbsDown, BrainCircuit, Flame, AlertTriangle, User, UserCheck, X, Copy, Download, Check, Gavel, Timer, Globe2 } from 'lucide-react';
 import html2canvas from 'html2canvas';
+import { TownSquareService } from '../services/townSquareService';
 
 interface VerdictResultProps {
   verdict: VerdictData;
@@ -18,6 +20,9 @@ const VerdictResult: React.FC<VerdictResultProps> = ({ verdict, caseData, onRese
   const [shareModalOpen, setShareModalOpen] = useState<boolean>(false);
   const [shareImage, setShareImage] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<boolean>(false);
+  
+  // Publish State
+  const [isPublished, setIsPublished] = useState(false);
   
   // Timer for Appeal (15 minutes)
   const [timeLeft, setTimeLeft] = useState<number>(0);
@@ -59,6 +64,19 @@ const VerdictResult: React.FC<VerdictResultProps> = ({ verdict, caseData, onRese
     { name: isCute ? '你的立场' : '你的槽点', value: verdict.userPercentage, color: isCute ? '#F472B6' : '#EC4899' },
     { name: isCute ? 'TA的立场' : 'TA的槽点', value: verdict.partnerPercentage, color: isCute ? '#60A5FA' : '#3B82F6' },
   ];
+
+  const handlePublishToSquare = () => {
+    if (isPublished) return;
+    if (confirm("确定要将此案件发布到法庭广场吗？其他用户将可以看到并参与投票。")) {
+      const success = TownSquareService.publishCase(caseData, verdict, persona);
+      if (success) {
+        setIsPublished(true);
+        alert("发布成功！你可以去法庭广场查看了。");
+      } else {
+        alert("发布失败，请稍后再试。");
+      }
+    }
+  };
 
   const handleGenerateShare = async () => {
     if (!shareCardRef.current) return;
@@ -260,53 +278,70 @@ const VerdictResult: React.FC<VerdictResultProps> = ({ verdict, caseData, onRese
         </div>
 
         {/* Footer Actions */}
-        <div className={`p-6 border-t flex flex-col md:flex-row gap-4 items-center justify-between ${
+        <div className={`p-6 border-t flex flex-col gap-4 ${
            isCute ? 'bg-stone-50 border-stone-100' : 'bg-stone-800 border-stone-700'
         }`}>
-           <button 
-             onClick={onReset}
-             className={`w-full md:w-auto flex items-center justify-center gap-2 font-bold px-6 py-3 rounded-xl transition-colors ${
-                isCute 
-                ? 'text-stone-500 hover:text-stone-800 hover:bg-stone-200' 
-                : 'text-stone-400 hover:text-stone-200 hover:bg-stone-700'
-             }`}
-           >
-             <RotateCcw className="w-4 h-4" /> 重判
-           </button>
            
-           <div className="flex w-full md:w-auto gap-3">
-             {canAppeal && (
-               <button
-                 onClick={timeLeft > 0 ? onAppeal : undefined}
-                 disabled={timeLeft === 0}
-                 className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-all border ${
-                   timeLeft > 0 
-                     ? (isCute ? 'bg-white text-stone-700 border-yellow-300 hover:bg-yellow-50' : 'bg-stone-900 text-purple-400 border-purple-600/50 hover:bg-stone-800')
-                     : 'bg-stone-200 text-stone-400 border-stone-200 cursor-not-allowed opacity-70'
-                 }`}
-               >
-                 <Gavel className="w-4 h-4" />
-                 {timeLeft > 0 ? (
-                   <span>我要上诉 ({formatTime(timeLeft)})</span>
-                 ) : (
-                   <span>上诉已超时</span>
-                 )}
-               </button>
-             )}
-
+           <div className="flex gap-3">
              <button 
-               onClick={handleGenerateShare}
-               disabled={isGeneratingCard}
-               className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-8 py-3 rounded-xl font-bold transition-all shadow-lg hover:-translate-y-1 active:translate-y-0 disabled:opacity-70 disabled:cursor-wait ${
-                  isCute
-                  ? 'bg-yellow-400 text-stone-900 hover:bg-yellow-500'
-                  : 'bg-purple-600 text-white hover:bg-purple-700'
+               onClick={onReset}
+               className={`flex-1 flex items-center justify-center gap-2 font-bold px-4 py-3 rounded-xl transition-colors ${
+                  isCute 
+                  ? 'bg-stone-200 text-stone-600 hover:bg-stone-300' 
+                  : 'bg-stone-700 text-stone-300 hover:bg-stone-600'
                }`}
              >
-               {isGeneratingCard ? <span className="animate-spin">⏳</span> : <Share2 className="w-4 h-4" />}
-               {isGeneratingCard ? "生成中..." : "保存卡片"}
+               <RotateCcw className="w-4 h-4" /> 重判
              </button>
+             
+             {canAppeal && (
+                 <button
+                   onClick={timeLeft > 0 ? onAppeal : undefined}
+                   disabled={timeLeft === 0}
+                   className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold transition-all border ${
+                     timeLeft > 0 
+                       ? (isCute ? 'bg-white text-stone-700 border-yellow-300 hover:bg-yellow-50' : 'bg-stone-900 text-purple-400 border-purple-600/50 hover:bg-stone-800')
+                       : 'bg-stone-200 text-stone-400 border-stone-200 cursor-not-allowed opacity-70'
+                   }`}
+                 >
+                   <Gavel className="w-4 h-4" />
+                   {timeLeft > 0 ? (
+                     <span>上诉 ({formatTime(timeLeft)})</span>
+                   ) : (
+                     <span>上诉已超时</span>
+                   )}
+                 </button>
+             )}
            </div>
+
+           <div className="flex gap-3">
+              <button
+                onClick={handlePublishToSquare}
+                disabled={isPublished}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold transition-all ${
+                   isPublished 
+                   ? (isCute ? 'bg-green-100 text-green-700' : 'bg-green-900/30 text-green-400')
+                   : (isCute ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'bg-blue-900/30 text-blue-400 hover:bg-blue-900/50')
+                }`}
+              >
+                {isPublished ? <CheckCircle2 className="w-4 h-4" /> : <Globe2 className="w-4 h-4" />}
+                {isPublished ? "已发布到广场" : "发布到法庭广场"}
+              </button>
+
+              <button 
+                onClick={handleGenerateShare}
+                disabled={isGeneratingCard}
+                className={`flex-[1.5] flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-all shadow-lg hover:-translate-y-1 active:translate-y-0 disabled:opacity-70 disabled:cursor-wait ${
+                    isCute
+                    ? 'bg-yellow-400 text-stone-900 hover:bg-yellow-500'
+                    : 'bg-purple-600 text-white hover:bg-purple-700'
+                }`}
+              >
+                {isGeneratingCard ? <span className="animate-spin">⏳</span> : <Share2 className="w-4 h-4" />}
+                {isGeneratingCard ? "生成中..." : "保存卡片"}
+              </button>
+           </div>
+
         </div>
       </div>
 

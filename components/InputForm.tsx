@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { CaseData, JudgePersona } from '../types';
 import { ScrollText, ShieldCheck, User, UserCheck, Skull, ImagePlus, X } from 'lucide-react';
@@ -29,7 +28,8 @@ const InputForm: React.FC<InputFormProps> = ({ onSubmit, isLoading, persona, set
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const files = Array.from(e.target.files);
+      // Cast to File[] because Array.from might return unknown[] depending on tsconfig lib
+      const files = Array.from(e.target.files) as File[];
       const currentCount = formData.chatImages?.length || 0;
       
       if (currentCount + files.length > 10) {

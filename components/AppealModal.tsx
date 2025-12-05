@@ -21,7 +21,7 @@ const AppealModal: React.FC<AppealModalProps> = ({ isOpen, onClose, onSubmit, is
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const files = Array.from(e.target.files);
+      const files = Array.from(e.target.files) as File[];
       files.forEach(file => {
         const reader = new FileReader();
         reader.onloadend = () => {

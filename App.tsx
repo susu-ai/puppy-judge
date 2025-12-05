@@ -1,13 +1,16 @@
+
 import React, { useState, useEffect } from 'react';
-import { AppState, CaseData, VerdictData, JudgePersona, HistoryItem, CourtLevel, AppealData } from './types';
+import { AppState, CaseData, VerdictData, JudgePersona, HistoryItem, CourtLevel, AppealData, PublicCase } from './types';
 import { getPuppyVerdict } from './services/geminiService';
 import InputForm from './components/InputForm';
 import VerdictResult from './components/VerdictResult';
 import HistoryModal from './components/HistoryModal';
 import AppealModal from './components/AppealModal';
 import TransitionView from './components/TransitionView';
+import TownSquare from './components/TownSquare';
+import PublicCaseDetail from './components/PublicCaseDetail';
 import { Logger } from './utils/logger';
-import { ScrollText } from 'lucide-react';
+import { ScrollText, Globe2 } from 'lucide-react';
 
 const HISTORY_KEY = 'puppy_judge_history';
 
@@ -18,6 +21,9 @@ const App: React.FC = () => {
   // Default changed to TOXIC
   const [persona, setPersona] = useState<JudgePersona>(JudgePersona.TOXIC);
   
+  // Square State
+  const [selectedPublicCase, setSelectedPublicCase] = useState<PublicCase | null>(null);
+
   // Appeal & Transition State
   const [isAppealing, setIsAppealing] = useState(false);
   const [transitionTarget, setTransitionTarget] = useState<CourtLevel | null>(null);
@@ -89,8 +95,6 @@ const App: React.FC = () => {
       const result = await getPuppyVerdict(currentCase, persona, nextLevel, appealData, verdict);
       setVerdict(result);
       setTransitionTarget(null);
-      // Note: We don't save every appeal to history list to avoid clutter, 
-      // but in a real app you might want to update the latest entry.
     } catch (error) {
       setTransitionTarget(null);
       Logger.error("Appeal verdict failed", error);
@@ -114,7 +118,19 @@ const App: React.FC = () => {
     setShowHistory(false);
   };
 
+  const handleSquareClick = () => {
+    setAppState(AppState.SQUARE);
+    window.scrollTo(0, 0);
+  };
+
+  const handlePublicCaseClick = (pc: PublicCase) => {
+    setSelectedPublicCase(pc);
+    setAppState(AppState.SQUARE_DETAIL);
+    window.scrollTo(0, 0);
+  };
+
   // Dynamic Background
+  // If in square mode, background might be neutral or based on current persona setting
   const bgColor = persona === JudgePersona.CUTE ? 'bg-[#FFF9E5]' : 'bg-[#1c1917]';
   const textColor = persona === JudgePersona.CUTE ? 'text-stone-800' : 'text-stone-200';
   const selectionColor = persona === JudgePersona.CUTE ? 'selection:bg-yellow-200' : 'selection:bg-purple-900 selection:text-white';
@@ -129,7 +145,7 @@ const App: React.FC = () => {
           : 'bg-[#1c1917]/80 border-stone-800'
       }`}>
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setAppState(AppState.INPUT)}>
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm transition-colors duration-500 ${
               persona === JudgePersona.CUTE ? 'bg-yellow-400' : 'bg-purple-600'
             }`}>
@@ -141,6 +157,18 @@ const App: React.FC = () => {
           </div>
           
           <div className="flex items-center gap-2">
+            <button 
+              onClick={handleSquareClick}
+              className={`p-2 rounded-lg transition-colors flex items-center gap-1 text-sm font-bold ${
+                appState === AppState.SQUARE 
+                  ? (persona === JudgePersona.CUTE ? 'bg-yellow-200 text-stone-800' : 'bg-purple-900 text-white')
+                  : (persona === JudgePersona.CUTE ? 'hover:bg-yellow-100 text-stone-600' : 'hover:bg-stone-800 text-stone-400')
+              }`}
+            >
+              <Globe2 className="w-5 h-5" /> 
+              <span className="hidden sm:inline">广场</span>
+            </button>
+
             <button 
               onClick={() => setShowHistory(true)}
               className={`p-2 rounded-lg transition-colors flex items-center gap-1 text-sm font-bold ${
@@ -232,10 +260,27 @@ const App: React.FC = () => {
             />
           )}
 
+          {/* Town Square */}
+          {appState === AppState.SQUARE && (
+             <TownSquare 
+               onCaseClick={handlePublicCaseClick}
+               currentPersona={persona}
+             />
+          )}
+
+          {/* Town Square Detail */}
+          {appState === AppState.SQUARE_DETAIL && selectedPublicCase && (
+             <PublicCaseDetail 
+               publicCase={selectedPublicCase}
+               onBack={() => setAppState(AppState.SQUARE)}
+               currentPersona={persona}
+             />
+          )}
+
         </div>
       </main>
 
-      {/* Footer - Removed Download Logs Button */}
+      {/* Footer */}
       <footer className="py-8 text-center text-stone-500 text-sm opacity-60">
         <p>© 2024 Puppy Judge Project.</p>
       </footer>
